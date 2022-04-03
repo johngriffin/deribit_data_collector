@@ -1,0 +1,52 @@
+org: johngriffin
+app: deribit-data-collector
+service: deribit-data-collector
+
+frameworkVersion: '3'
+
+
+provider:
+  name: aws
+  runtime: python3.8
+  region: us-east-1
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+       - dynamodb:Query
+       - dynamodb:Scan
+       - dynamodb:GetItem
+       - dynamodb:PutItem
+       - dynamodb:UpdateItem
+       - dynamodb:DeleteItem
+       - dynamodb:DescribeTable
+       - dynamodb:BatchWriteItem
+      Resource: "arn:aws:dynamodb:us-east-1:538881967423:table/deribit_btc"
+    - Effect: "Allow"
+      Action:
+       - dynamodb:Query
+       - dynamodb:Scan
+       - dynamodb:GetItem
+       - dynamodb:PutItem
+       - dynamodb:UpdateItem
+       - dynamodb:DeleteItem
+       - dynamodb:DescribeTable
+       - dynamodb:BatchWriteItem
+      Resource: "arn:aws:dynamodb:us-east-1:538881967423:table/deribit_eth"
+
+functions:
+  rateHandler:
+    handler: handler.run
+    events:
+      # Invoke Lambda function every minute
+      - schedule: rate(5 minutes)
+    layers:
+      - arn:aws:lambda:us-east-1:336392948345:layer:AWSDataWrangler-Python38:2
+    timeout: 400
+
+
+#plugins:
+#  - serverless-python-requirements
+
+#custom:
+#  pythonRequirements:
+#    zip: true

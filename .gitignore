@@ -1,0 +1,7 @@
+.serverless
+*.pyc
+*.pyo
+Untitled.ipynb
+__pycache__
+.ipynb_checkpoints
+node_modules
