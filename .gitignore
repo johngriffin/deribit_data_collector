@@ -5,3 +5,4 @@ Untitled.ipynb
 __pycache__
 .ipynb_checkpoints
 node_modules
+.requirements.zip
