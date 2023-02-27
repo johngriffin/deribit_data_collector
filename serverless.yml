@@ -38,7 +38,7 @@ functions:
     handler: handler.run
     events:
       # Invoke Lambda function every minute
-      - schedule: rate(5 minutes)
+      - schedule: rate(1 hour)
     layers:
       - arn:aws:lambda:us-east-1:336392948345:layer:AWSDataWrangler-Python38:2
     timeout: 400
