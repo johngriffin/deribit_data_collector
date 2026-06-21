@@ -46,6 +46,8 @@ Net target: **~$15/mo → a few $/mo**, with the full history preserved cheaply 
 | Date | Action | Status |
 |---|---|---|
 | 2026-06-21 | Audited stack: tables/exports bucket are **external** to CloudFormation; confirmed testnet data source | done |
+| 2026-06-21 | Compared testnet vs mainnet: index/mark/IV/greeks ≈ real, but **OI/volume are testnet-only** and instrument universe differs (1058 vs 934) | done |
+| 2026-06-21 | Fixed `handler.py` data source `test.deribit.com` → `www.deribit.com`; verified locally against mainnet | done — pending deploy |
 | 2026-06-21 | Added archive S3 bucket + Glacier Deep Archive lifecycle to `serverless.yml` (IaC) | in PR — not yet deployed |
 | 2026-06-21 | Added (commented) DynamoDB table resources with Standard-IA + PITR + Retain + deletion protection, for import-based adoption | in PR — not yet applied |
 | _pending_ | Run apply runbook step 1–2 (table class) | **TODO (needs deploy/admin access)** |

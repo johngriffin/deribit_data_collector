@@ -19,7 +19,7 @@ def get_option_name_and_settlement(coin):
                         2.  list of settlement period for the selected coin.
     """
 
-    r = requests.get("https://test.deribit.com/api/v2/public/get_instruments?currency=" + coin + "&kind=option")
+    r = requests.get("https://www.deribit.com/api/v2/public/get_instruments?currency=" + coin + "&kind=option")
     result = json.loads(r.text)
 
     # get option name
@@ -49,7 +49,7 @@ def get_option_data(coin):
     for i in range(len(coin_name)):
         # download option data -- requests and convert json to pandas
         print ("getting " + coin_name[i])
-        r = requests.get('https://test.deribit.com/api/v2/public/get_order_book?instrument_name=' + coin_name[i])
+        r = requests.get('https://www.deribit.com/api/v2/public/get_order_book?instrument_name=' + coin_name[i])
         result = json.loads(r.text)
         df = pd.json_normalize(result['result'])
 
