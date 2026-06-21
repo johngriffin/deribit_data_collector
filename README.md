@@ -15,52 +15,52 @@ Runs on Serverless for easy deployment to AWS lambda, storing data in DynamoDB.
 
 ## Storage Architecture & Cost Management
 
-### Current state (as of 2026-06-21)
+### Current state (as of 2026-06-21, after archive)
 
 | Resource | Managed by | Notes |
 |---|---|---|
 | Lambda `rateHandler`, EventBridge schedule, IAM role, log group, deploy bucket | **CloudFormation** (this `serverless.yml`) | `serverless deploy` owns these |
-| DynamoDB `deribit_btc` (~26 GB, ~40.7M items) | **External** (created 2022-03-01, not in stack) | referenced by hardcoded ARN in IAM only |
-| DynamoDB `deribit_eth` (~28 GB, ~45.9M items) | **External** (created 2022-03-01, not in stack) | referenced by hardcoded ARN in IAM only |
-| S3 `deribit-exports` | **External** (created 2024-11-25, not in stack) | holds a one-off DynamoDB export snapshot from Nov 2024 |
+| DynamoDB `deribit_btc` | **External** (created 2022-03-01) | **truncated + recreated empty 2026-06-21**, now **Standard-IA**, PITR on; refilling with mainnet data |
+| DynamoDB `deribit_eth` | **External** (created 2022-03-01) | **truncated + recreated empty 2026-06-21**, now **Standard-IA**, PITR on; refilling with mainnet data |
+| S3 `deribit-archive-538881967423` | **External** (created 2026-06-21) | **cold archive** of the pre-truncate history; lifecycle → Glacier Deep Archive |
+| S3 `deribit-exports` | **External** (created 2024-11-25) | older one-off DynamoDB export snapshot from Nov 2024 (superseded by the archive above) |
 
-Data range: continuous hourly snapshots from **2022-03-01** to present (~54 GB, ~86M rows total).
-Both tables are **on-demand (PAY_PER_REQUEST)**, **Standard** table class, no GSIs, single hash key `id` (a time-based UUID1); each row also carries a `timestamp` attribute (epoch ms).
+The pre-truncate history (continuous hourly snapshots **2022-03-01 → 2026-06-21**, ~54 GB / ~86.6M rows) now lives **only** in the Glacier archive. The live tables restarted empty on 2026-06-21 and grow from there. Schema unchanged: on-demand, single hash key `id` (time-based UUID1), each row has a `timestamp` attribute (epoch ms).
 
-### Cost (Standard class, ~54 GB)
+### The archive boundary `T`
 
-Storage dominates: ~$0.25/GB-mo ≈ **$13.5/mo storage + ~$2/mo writes ≈ ~$15–16/mo**.
-(First 25 GB of DynamoDB storage is free account-wide but shared with other tables, so effective cost may be lower.)
+- **Archive (Glacier)** holds everything written **before ~2026-06-21 13:38 UTC** (point-in-time of the export; schedule was paused at 13:38 so nothing was written after that until truncation).
+- **Live DynamoDB** holds everything from the first run after **13:55 UTC 2026-06-21** onward.
+- ⚠️ The archived history before 2026-06-21 is **testnet** data (real index/mark/IV/greeks, but testnet-only OI/volume). Live data from 2026-06-21 onward is **mainnet** (see data-source note at top).
 
-### Plan
+### Cost impact
 
-Two changes, applied in order, to cut cost without changing collector behaviour (the Lambda keeps writing to the same table names — **no `handler.py` change required**):
-
-1. **Standard-IA table class** — storage drops $0.25 → $0.10/GB (~60% off). Keeps data fully queryable. ~$15/mo → ~$8/mo.
-2. **Glacier archive + trim** — export the full history to S3 → Glacier Deep Archive (~10 GB compressed ≈ ~$0.12/yr), then trim the cold history out of DynamoDB so the live table stays small and refills going forward. Drives recurring DynamoDB cost toward the free tier.
-
-Net target: **~$15/mo → a few $/mo**, with the full history preserved cheaply in Glacier.
+Before: Standard class, ~54 GB ≈ **~$15–16/mo** (storage-dominated).
+After: live tables ~empty in Standard-IA (toward the free tier) + Glacier archive (~12.5 GB compressed ≈ **~$0.15/yr**). Recurring DynamoDB storage cost is now negligible and regrows slowly; one-time export cost was ~$5.40.
 
 ### Decision / action log
 
-| Date | Action | Status |
+| Date (UTC) | Action | Status |
 |---|---|---|
 | 2026-06-21 | Audited stack: tables/exports bucket are **external** to CloudFormation; confirmed testnet data source | done |
 | 2026-06-21 | Compared testnet vs mainnet: index/mark/IV/greeks ≈ real, but **OI/volume are testnet-only** and instrument universe differs (1058 vs 934) | done |
 | 2026-06-21 | Fixed `handler.py` data source `test.deribit.com` → `www.deribit.com`; verified locally against mainnet | done |
-| 2026-06-21 | Deployed fix via `serverless deploy` (stage dev); post-deploy run pulled 934 BTC instruments (mainnet count) with no errors → **collecting real mainnet data going forward** | done |
-| 2026-06-21 | Added archive S3 bucket + Glacier Deep Archive lifecycle to `serverless.yml` (IaC) | in PR — not yet deployed |
-| 2026-06-21 | Added (commented) DynamoDB table resources with Standard-IA + PITR + Retain + deletion protection, for import-based adoption | in PR — not yet applied |
-| _pending_ | Run apply runbook step 1–2 (table class) | **TODO (needs deploy/admin access)** |
-| _pending_ | Run apply runbook step 3–6 (export → verify → trim) | **TODO (needs deploy/admin access)** |
+| 2026-06-21 | Deployed fix via `serverless deploy` (stage dev); post-deploy run pulled 934 BTC instruments (mainnet count), no errors | done |
+| 2026-06-21 | Created archive bucket `deribit-archive-538881967423` (private, Glacier Deep Archive lifecycle); enabled PITR on both tables | done |
+| 2026-06-21 13:38 | Paused schedule (disabled EventBridge rule) to stop writes — guarantees no export→truncate gap | done |
+| 2026-06-21 13:54 | Full exports COMPLETED & verified: `deribit_btc` 40,685,169 items / 6.47 GB; `deribit_eth` 45,876,199 items / 6.0 GB. describe-export count == S3 manifest count == ≥ table baseline | done |
+| 2026-06-21 13:54 | Truncated both tables (drop + recreate **empty Standard-IA**, PITR re-enabled) — only after export verification passed | done |
+| 2026-06-21 13:55 | Re-enabled schedule; collector resumed writing mainnet data to the fresh tables | done |
 
 ---
 
 ## Apply runbook (safe, ordered — no data loss)
 
-> None of the steps below have been executed yet. They require AWS admin + Serverless
-> dashboard (`serverless login`) credentials. Do them in order; do not skip the
-> verification gates. Region is `us-east-1` throughout.
+> ✅ **This runbook was executed on 2026-06-21** (see action log above). It is kept here as
+> the reference procedure for the **next** archive cycle (when the live tables have regrown
+> and you want to roll history off to Glacier again). Do the steps in order; do not skip the
+> verification gates. Region is `us-east-1` throughout. The archive was done with the AWS CLI
+> (manual), not serverless, because the tables are external to the stack.
 
 ### Step 1 — Make Standard-IA the IaC source of truth (optional but recommended)
 
@@ -142,15 +142,18 @@ before a full wipe so no hourly sample is lost.
 
 ## Reconciling the two storages later
 
-After trimming, history lives in **two places**:
+After the 2026-06-21 trim, history lives in **two places**:
 
-- **Glacier (S3)** — everything up to the export/trim time `T`. Compressed DynamoDB-JSON.
-- **Live DynamoDB** — data from `T` onward (continuously refilled by the Lambda).
+- **Glacier (S3)** — everything up to `T ≈ 2026-06-21 13:38 UTC`. Compressed DynamoDB-JSON, at:
+  - `s3://deribit-archive-538881967423/deribit_btc/full-20260621/AWSDynamoDB/01782049146831-e6c5fbce/`
+  - `s3://deribit-archive-538881967423/deribit_eth/full-20260621/AWSDynamoDB/01782049148159-b20a6a4a/`
+  - (each export folder has a `manifest-summary.json` with the exact `itemCount`)
+- **Live DynamoDB** — data from `T` onward (first run 2026-06-21 13:55 UTC; continuously refilled by the Lambda).
 
 To query the full history again:
 
 1. **Restore from Glacier:** `aws s3 restore-object` (or console "Initiate restore") on the export
-   objects under `deribit-archive-538881967423/deribit_<coin>/...`. Deep Archive restore takes up to
+   objects under the prefixes above. Deep Archive restore takes up to
    ~12 h (bulk) / ~48 h depending on tier; budget for it.
 2. **Query the archive without reloading DynamoDB (preferred):** point **Athena** at the restored
    export prefix. DynamoDB export JSON is one row per item; create an external table over it and

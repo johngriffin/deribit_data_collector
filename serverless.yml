@@ -44,72 +44,13 @@ functions:
     timeout: 400
 
 # ---------------------------------------------------------------------------
-# Storage / cost-management infrastructure. See README "Storage Architecture
-# & Cost Management" for the full plan, runbook, and reconciliation procedure.
+# Storage is intentionally NOT managed by this stack. The DynamoDB tables
+# (deribit_btc, deribit_eth) and the archive bucket (deribit-archive-538881967423,
+# S3 -> Glacier Deep Archive) are managed externally via the AWS CLI so that
+# data operations (export / truncate) cannot be affected by a CloudFormation
+# rollback. See README "Storage Architecture & Cost Management" for the full
+# record, runbook, and how to reconcile the Glacier archive with the live table.
 # ---------------------------------------------------------------------------
-resources:
-  Resources:
-
-    # Cold archive for DynamoDB -> S3 exports. Objects transition to Glacier
-    # Deep Archive (~$0.00099/GB-mo). This is a NEW resource, safe to deploy.
-    DeribitArchiveBucket:
-      Type: AWS::S3::Bucket
-      DeletionPolicy: Retain
-      UpdateReplacePolicy: Retain
-      Properties:
-        BucketName: deribit-archive-538881967423
-        LifecycleConfiguration:
-          Rules:
-            - Id: exports-to-deep-archive
-              Status: Enabled
-              Transitions:
-                - StorageClass: DEEP_ARCHIVE
-                  TransitionInDays: 1
-
-    # -----------------------------------------------------------------------
-    # The deribit_btc / deribit_eth tables were created manually in 2022 and
-    # are NOT part of this stack. To bring them under serverless management,
-    # UNCOMMENT the blocks below and IMPORT the existing tables FIRST
-    # (CloudFormation cannot create a table that already exists). See README
-    # "Apply runbook -> Step 1". DeletionPolicy: Retain guarantees the data
-    # survives any rollback. Do NOT uncomment-and-deploy without importing.
-    # -----------------------------------------------------------------------
-    # DeribitBtcTable:
-    #   Type: AWS::DynamoDB::Table
-    #   DeletionPolicy: Retain
-    #   UpdateReplacePolicy: Retain
-    #   Properties:
-    #     TableName: deribit_btc
-    #     BillingMode: PAY_PER_REQUEST
-    #     TableClass: STANDARD_INFREQUENT_ACCESS
-    #     DeletionProtectionEnabled: true
-    #     AttributeDefinitions:
-    #       - AttributeName: id
-    #         AttributeType: S
-    #     KeySchema:
-    #       - AttributeName: id
-    #         KeyType: HASH
-    #     PointInTimeRecoverySpecification:
-    #       PointInTimeRecoveryEnabled: true
-    #
-    # DeribitEthTable:
-    #   Type: AWS::DynamoDB::Table
-    #   DeletionPolicy: Retain
-    #   UpdateReplacePolicy: Retain
-    #   Properties:
-    #     TableName: deribit_eth
-    #     BillingMode: PAY_PER_REQUEST
-    #     TableClass: STANDARD_INFREQUENT_ACCESS
-    #     DeletionProtectionEnabled: true
-    #     AttributeDefinitions:
-    #       - AttributeName: id
-    #         AttributeType: S
-    #     KeySchema:
-    #       - AttributeName: id
-    #         KeyType: HASH
-    #     PointInTimeRecoverySpecification:
-    #       PointInTimeRecoveryEnabled: true
-
 
 #plugins:
 #  - serverless-python-requirements
