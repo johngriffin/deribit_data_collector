@@ -6,10 +6,11 @@ Pulls all available instruments for BTC and ETH (all strikes and expiries), incl
 
 Runs on Serverless for easy deployment to AWS lambda, storing data in DynamoDB.
 
-> ⚠️ **Data source note:** `handler.py` currently pulls from `https://test.deribit.com`
-> (Deribit **testnet**), not `https://www.deribit.com` (mainnet). All historical data
-> collected to date is testnet data. If mainnet data was intended, this is a one-line
-> fix in `handler.py` — decide before relying on the archive for analysis.
+> ℹ️ **Data source note:** `handler.py` pulls from `https://www.deribit.com` (Deribit
+> **mainnet**) as of 2026-06-21. **Before that date it pulled from `https://test.deribit.com`
+> (testnet)** — so the Glacier archive (data before 2026-06-21) is testnet data: real
+> index/mark/IV/greeks but testnet-only open-interest/volume. Live data from 2026-06-21
+> onward is mainnet. Keep this boundary in mind when analysing across the archive split.
 
 ---
 
